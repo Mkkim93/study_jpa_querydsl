@@ -2,6 +2,8 @@ package study.querydsl;
 
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -16,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+import study.querydsl.dto.MemberDTO;
+import study.querydsl.dto.UserDTO;
 import study.querydsl.entity.Member;
 import study.querydsl.entity.QMember;
 import study.querydsl.entity.Team;
@@ -481,6 +485,156 @@ public class QuerydslBasicTest {
 
         for (String s : result) {
             System.out.println("s = " + s);
+        }
+    }
+
+    @Test
+    public void simpleProjection() throws Exception {
+        List<String> result = queryFactory
+                .select(member.username)
+                .from(member)
+                .fetch();
+
+        for (String s : result) {
+            System.out.println("s = " + s);
+        }
+    }
+
+    /**
+     * select 할 대상이 두개 이상일 때는 return Type = Tuple
+     * !중요 : Tuple 로 반환되는 객체는 repository 에서만 사용 할 것 (service 또는 controller 계층까지 넘어가지 않도록 설계)
+     */
+    @Test
+    public void tupleProjection() throws Exception {
+
+        List<Tuple> result = queryFactory
+                .select(member.username, member.age)
+                .from(member)
+                .fetch();
+
+        for (Tuple tuple : result) {
+            String username = tuple.get(member.username);
+            Integer age = tuple.get(member.age);
+            System.out.println("username = " + username);
+            System.out.println("age = " + age);
+        }
+    }
+
+    /**
+     *  DTO 로 다이렉트 조회 (new Operation 활용 방법)
+     *  step 1. select + new dto 클래스가 있는 경로 설정 (java 파일 바로 하위에 있는 경로부터 dto 클래스까지)
+     *  step 2. 경로 설정이 끝나고 MemberDTO 에서 선언한 생성자를 가지고 오듯 파라미터 값을 적는다.
+     */
+    @Test
+    public void findDtoByJPQL() throws Exception {
+
+        List<MemberDTO> resultList = em.createQuery("select new study.querydsl.dto.MemberDTO(m.username, m.age) " +
+                                "from Member m", MemberDTO.class)
+                .getResultList();
+
+        System.out.println("resultList = " + resultList);
+    }
+
+    /**
+     * querydsl 사용해서 DTO 에 접근하는 방식 (Projection 'Bean' 접근 방식)
+     * 핵심 : 1) select :Projections.bean(조회할 DTO 클래스, 조회할 컬럼 ...)
+     */
+    @Test
+    public void findDtoBy() throws Exception {
+
+        List<MemberDTO> result = queryFactory
+                .select(Projections.bean(MemberDTO.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+
+        for (MemberDTO memberDTO : result) {
+            System.out.println("memberDTO = " + memberDTO);
+        }
+    }
+
+    /**
+     * querydsl 사용해서 DTO 에 접근하는 방식 (Projection 'field' 접근 방식)
+     * 핵심 : 1) select :Projections.field(조회할 DTO 클래스, 조회할 컬럼 ...)
+     */
+    @Test
+    public void findDtoByField() throws Exception {
+        List<MemberDTO> result = queryFactory
+                .select(Projections.fields(MemberDTO.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+
+        for (MemberDTO memberDTO : result) {
+            System.out.println("memberDTO = " + memberDTO);
+        }
+    }
+
+    /**
+     * querydsl 사용해서 DTO 에 접근하는 방식 (Projection 'constructor' 접근 방식)
+     * 핵심 : 1) select :Projections.constructor(조회할 DTO 클래스, 조회할 컬럼 ...)
+     * 생성자의 데이터 타입 맞춰줄 것
+     */
+    @Test
+    public void findDtoConstructor() throws Exception {
+        List<MemberDTO> result = queryFactory
+                .select(Projections.constructor(MemberDTO.class,
+                        member.username,
+                        member.age))
+                .from(member)
+                .fetch();
+
+        for (MemberDTO memberDTO : result) {
+            System.out.println("memberDTO = " + memberDTO);
+        }
+    }
+
+    @Test
+    public void findUserDto() throws Exception {
+        List<UserDTO> result = queryFactory
+                .select(Projections.fields(UserDTO.class,
+                        member.username.as("name"), // alias 를 사용하여 UserDTO 의 필드명과 일치 시킨다.
+                        member.age))
+                .from(member)
+                .fetch();
+
+        for (UserDTO userDTO : result) {
+            System.out.println("userDTO = " + userDTO);
+        }
+    }
+
+    @Test
+    public void findUserDtoSubquery() throws Exception {
+        QMember memberSub = new QMember("memberSub");
+        List<UserDTO> result = queryFactory
+                .select(Projections.fields(UserDTO.class,
+                        member.username.as("name"), // alias 를 사용하여 UserDTO 의 필드명과 일치 시킨다.
+                        ExpressionUtils.as(JPAExpressions
+                                .select(memberSub.age.max()).from(memberSub), "age")
+                ))
+                .from(member)
+                .fetch();
+
+        for (UserDTO userDTO : result) {
+            System.out.println("userDTO = " + userDTO);
+        }
+    }
+
+    // 연습 : 생성자 방식
+    @Test
+    public void soloTestQueryConstructor() throws Exception {
+
+        List<UserDTO> userDto = queryFactory
+                .select(Projections.constructor(UserDTO.class,
+                        member.username.as("name"),
+                        member.age))
+                .from(member)
+                .fetch();
+
+        for (UserDTO userDTO : userDto) {
+            System.out.println("userDTO = " + userDTO);
         }
     }
 }
