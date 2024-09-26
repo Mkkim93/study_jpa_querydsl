@@ -1,11 +1,6 @@
 spring:
-  data:
-    web:
-      pageable:
-        #default-page-size: 10
-        #max-page-size: 50
   profiles:
-    active: local
+    active: test
   datasource:
     url: jdbc:mysql://localhost:3306/member
     username: root
@@ -17,6 +12,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        use_sql_comment: true
   logging:
     level:
       org.hibernate.SQL: debug
